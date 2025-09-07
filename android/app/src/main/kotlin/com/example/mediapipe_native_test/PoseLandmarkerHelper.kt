@@ -21,7 +21,9 @@ class PoseLandmarkerHelper(val context: Context) {
 
     private fun setupPoseLandmarker() {
         try {
-            val baseOptionsBuilder = BaseOptions.builder().setModelAssetPath("pose_landmarker.task")
+            val baseOptionsBuilder = BaseOptions.builder()
+                .setDelegate(BaseOptions.Delegate.GPU)
+                .setModelAssetPath("pose_landmarker.task")
             val optionsBuilder = PoseLandmarker.PoseLandmarkerOptions.builder()
                 .setBaseOptions(baseOptionsBuilder.build())
                 .setRunningMode(RunningMode.IMAGE)
@@ -41,9 +43,17 @@ class PoseLandmarkerHelper(val context: Context) {
         val totalTime = SystemClock.uptimeMillis()
 
         // Convert byte array to Bitmap
-        val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+        var bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
         if (bitmap == null) {
             return mapOf("error" to "Failed to decode image.")
+        }
+
+        // Resize the bitmap if its width is greater than 400px
+        val imageWidth = bitmap.width
+        if (imageWidth > 400) {
+            val scaleFactor = 400f / imageWidth
+            val newHeight = (bitmap.height * scaleFactor).toInt()
+            bitmap = Bitmap.createScaledBitmap(bitmap, 400, newHeight, false)
         }
 
         // Tahap 1: Preprocessing
