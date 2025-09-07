@@ -41,7 +41,7 @@ android {
 
 dependencies {
     // Tambahkan dependensi untuk MediaPipe Vision Task
-    implementation("com.google.mediapipe:tasks-vision:latest.release")
+    implementation("com.google.mediapipe:tasks-vision:0.10.9")
 }
 
 flutter {
