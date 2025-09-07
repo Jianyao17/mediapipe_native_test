@@ -75,14 +75,26 @@ class _PoseDetectorPageState extends State<PoseDetectorPage> {
   void _handleDetectionResult(dynamic result) {
     if (result == null) {
       setState(() {
-        _timingDetails = "Gagal mendapatkan hasil dari native code.";
+        _timingDetails = "Gagal mendapatkan hasil dari native code (hasil null).";
+        _landmarkData = '';
+        _landmarks = [];
       });
       return;
     }
 
     final Map<Object?, Object?> resultMap = result;
 
-    // Parse timing
+    // Check for an error from the native side first
+    if (resultMap.containsKey('error')) {
+      setState(() {
+        _timingDetails = "Error dari native code: ${resultMap['error']}";
+        _landmarkData = '';
+        _landmarks = [];
+      });
+      return;
+    }
+
+    // If no error, proceed with parsing
     final timing = resultMap['timing'] as Map<Object?, Object?>;
     final total = timing['total'];
     final preprocessing = timing['preprocessing'];
@@ -95,24 +107,24 @@ class _PoseDetectorPageState extends State<PoseDetectorPage> {
     final StringBuffer landmarkBuffer = StringBuffer();
 
     if (landmarksResult != null && landmarksResult.isNotEmpty) {
-        int poseIndex = 0;
-        for(final poseData in landmarksResult) {
-            final List<Map<String, double>> pose = [];
-            landmarkBuffer.writeln('Pose #${poseIndex++}');
-            int landmarkIndex = 0;
-            for (final landmarkMap in (poseData as List<Object?>)) {
-                 final landmark = (landmarkMap as Map<Object?, Object?>).cast<String, double>();
-                 pose.add(landmark);
-                 final x = landmark['x']!.toStringAsFixed(2);
-                 final y = landmark['y']!.toStringAsFixed(2);
-                 final z = landmark['z']!.toStringAsFixed(2);
-                 final vis = landmark['visibility']!.toStringAsFixed(2);
-                 landmarkBuffer.writeln('  L${landmarkIndex++}: (x:$x, y:$y, z:$z, vis:$vis)');
-            }
-            parsedLandmarks.add(pose);
+      int poseIndex = 0;
+      for (final poseData in landmarksResult) {
+        final List<Map<String, double>> pose = [];
+        landmarkBuffer.writeln('Pose #${poseIndex++}');
+        int landmarkIndex = 0;
+        for (final landmarkMap in (poseData as List<Object?>)) {
+          final landmark = (landmarkMap as Map<Object?, Object?>).cast<String, double>();
+          pose.add(landmark);
+          final x = landmark['x']!.toStringAsFixed(2);
+          final y = landmark['y']!.toStringAsFixed(2);
+          final z = landmark['z']!.toStringAsFixed(2);
+          final vis = landmark['visibility']!.toStringAsFixed(2);
+          landmarkBuffer.writeln('  L${landmarkIndex++}: (x:$x, y:$y, z:$z, vis:$vis)');
         }
+        parsedLandmarks.add(pose);
+      }
     } else {
-        landmarkBuffer.writeln("Tidak ada pose yang terdeteksi.");
+      landmarkBuffer.writeln("Tidak ada pose yang terdeteksi.");
     }
 
     setState(() {
