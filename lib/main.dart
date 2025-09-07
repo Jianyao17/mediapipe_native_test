@@ -72,6 +72,16 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
     }
   }
 
+  Future<void> _startCamera() async {
+    try {
+      await platform.invokeMethod('startCamera');
+    } on PlatformException catch (e) {
+      setState(() {
+        _status = "Gagal membuka kamera: '${e.message}'.";
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -109,6 +119,18 @@ class _FaceDetectorPageState extends State<FaceDetectorPage> {
                 onPressed: _isLoading ? null : _pickImage,
                 icon: const Icon(Icons.image),
                 label: const Text('Pilih Gambar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                  textStyle: const TextStyle(fontSize: 16),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _isLoading ? null : _startCamera,
+                icon: const Icon(Icons.camera),
+                label: const Text('Buka Kamera'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.deepPurple,
                   foregroundColor: Colors.white,

@@ -1,5 +1,6 @@
 package com.example.mediapipe_native_test
 
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.util.Log
 import androidx.annotation.NonNull
@@ -54,6 +55,10 @@ class MainActivity : FlutterActivity()
                                     }
                                 }
                             }
+                        } else if (call.method == "startCamera") {
+                            val intent = Intent(this, com.example.mediapipe_native_test.posedetection.CameraActivity::class.java)
+                            startActivity(intent)
+                            result.success(null)
                         } else {
                             result.notImplemented()
                         }
