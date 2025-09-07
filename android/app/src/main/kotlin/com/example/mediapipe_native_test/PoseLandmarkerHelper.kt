@@ -1,15 +1,14 @@
 package com.example.mediapipe_native_test
 
 import android.content.Context
-import android.util.Log
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.SystemClock
+import android.util.Log
+import androidx.core.graphics.scale
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
-import java.util.Locale
 
 class PoseLandmarkerHelper(val context: Context) {
 
@@ -22,7 +21,6 @@ class PoseLandmarkerHelper(val context: Context) {
     private fun setupPoseLandmarker() {
         try {
             val baseOptionsBuilder = BaseOptions.builder()
-                .setDelegate(BaseOptions.Delegate.GPU)
                 .setModelAssetPath("pose_landmarker.task")
             val optionsBuilder = PoseLandmarker.PoseLandmarkerOptions.builder()
                 .setBaseOptions(baseOptionsBuilder.build())
@@ -53,7 +51,7 @@ class PoseLandmarkerHelper(val context: Context) {
         if (imageWidth > 400) {
             val scaleFactor = 400f / imageWidth
             val newHeight = (bitmap.height * scaleFactor).toInt()
-            bitmap = Bitmap.createScaledBitmap(bitmap, 400, newHeight, false)
+            bitmap = bitmap.scale(400, newHeight, false)
         }
 
         // Tahap 1: Preprocessing
