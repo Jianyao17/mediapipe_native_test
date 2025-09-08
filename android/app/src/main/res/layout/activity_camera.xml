@@ -30,4 +30,15 @@
         android:textSize="18sp"
         tools:text="FPS: 30" />
 
+    <TextView
+        android:id="@+id/landmarks_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/fps_text"
+        android:layout_alignParentStart="true"
+        android:layout_marginStart="16dp"
+        android:textColor="@android:color/white"
+        android:textSize="18sp"
+        tools:text="Landmarks: 0" />
+
 </RelativeLayout>

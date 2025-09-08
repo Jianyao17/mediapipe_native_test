@@ -35,6 +35,7 @@ class CameraActivity : AppCompatActivity(), PoseLandmarkerHelper.LandmarkerListe
     lateinit var backgroundExecutor: ExecutorService
     private lateinit var overlayView: OverlayView
     private lateinit var fpsText: TextView
+    private lateinit var landmarksText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +43,7 @@ class CameraActivity : AppCompatActivity(), PoseLandmarkerHelper.LandmarkerListe
 
         overlayView = findViewById(R.id.overlay)
         fpsText = findViewById(R.id.fps_text)
+        landmarksText = findViewById(R.id.landmarks_text)
 
         if (allPermissionsGranted()) {
             setupML()
@@ -112,9 +114,13 @@ class CameraActivity : AppCompatActivity(), PoseLandmarkerHelper.LandmarkerListe
 
     override fun onResults(resultBundle: PoseLandmarkerHelper.ResultBundle) {
         runOnUiThread {
+            val poseLandmarkerResult = resultBundle.results.first()
+            val landmarkCount = poseLandmarkerResult.landmarks().firstOrNull()?.size ?: 0
             fpsText.text = "FPS: ${resultBundle.inferenceTime}"
+            landmarksText.text = "Landmarks: $landmarkCount"
+
             overlayView.setResults(
-                resultBundle.results.first(),
+                poseLandmarkerResult,
                 resultBundle.inputImageHeight,
                 resultBundle.inputImageWidth,
                 RunningMode.LIVE_STREAM
