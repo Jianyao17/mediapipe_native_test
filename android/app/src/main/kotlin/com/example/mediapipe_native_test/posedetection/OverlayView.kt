@@ -32,8 +32,8 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
     View(context, attrs) {
 
     private var results: PoseLandmarkerResult? = null
-    private var pointPaint: Paint
-    private var linePaint: Paint
+    private lateinit var pointPaint: Paint
+    private lateinit var linePaint: Paint
     private var scaleFactor: Float = 1f
     private var imageWidth: Int = 1
     private var imageHeight: Int = 1

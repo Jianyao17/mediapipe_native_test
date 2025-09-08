@@ -44,7 +44,7 @@ class CameraActivity : AppCompatActivity(), PoseLandmarkerHelper.LandmarkerListe
         fpsText = findViewById(R.id.fps_text)
 
         if (allPermissionsGranted()) {
-            // Permissions are granted, proceed with camera setup
+            setupML()
         } else {
             ActivityCompat.requestPermissions(
                 this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
@@ -54,11 +54,16 @@ class CameraActivity : AppCompatActivity(), PoseLandmarkerHelper.LandmarkerListe
 
     override fun onResume() {
         super.onResume()
-        // Initialize the PoseLandmarkerHelper and background executor once the permissions are granted
-        if (allPermissionsGranted()) {
-            backgroundExecutor = Executors.newSingleThreadExecutor()
-            startPoseLandmarker()
+        if (allPermissionsGranted() && !::poseLandmarkerHelper.isInitialized) {
+            setupML()
         }
+    }
+
+    private fun setupML() {
+        if (!::backgroundExecutor.isInitialized) {
+            backgroundExecutor = Executors.newSingleThreadExecutor()
+        }
+        startPoseLandmarker()
     }
 
     private fun startPoseLandmarker() {
@@ -93,7 +98,7 @@ class CameraActivity : AppCompatActivity(), PoseLandmarkerHelper.LandmarkerListe
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
-                startPoseLandmarker()
+                setupML()
             } else {
                 Toast.makeText(
                     this,

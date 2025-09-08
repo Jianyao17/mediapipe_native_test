@@ -88,25 +88,18 @@ class PoseLandmarkerHelper(
         }
         val frameTime = SystemClock.uptimeMillis()
 
-        val bitmapBuffer =
-            Bitmap.createBitmap(
-                imageProxy.width,
-                imageProxy.height,
-                Bitmap.Config.ARGB_8888
-            )
-        imageProxy.use { bitmapBuffer.copyPixelsFromBuffer(it.planes[0].buffer) }
-        imageProxy.close()
+        val bitmap = imageProxy.toBitmap()
+
         val matrix = Matrix().apply {
             postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
             if (isFrontCamera) {
-                postScale(-1f, 1f, imageProxy.width.toFloat(), imageProxy.height.toFloat())
+                postScale(-1f, 1f, bitmap.width.toFloat(), bitmap.height.toFloat())
             }
         }
-        val rotatedBitmap =
-            Bitmap.createBitmap(
-                bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
-                matrix, true
-            )
+
+        val rotatedBitmap = Bitmap.createBitmap(
+            bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+        )
 
         val mpImage = BitmapImageBuilder(rotatedBitmap).build()
         detectAsync(mpImage, frameTime)
