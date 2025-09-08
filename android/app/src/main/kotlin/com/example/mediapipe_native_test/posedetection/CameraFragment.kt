@@ -36,8 +36,7 @@ import java.util.concurrent.Executors
 
 class CameraFragment : Fragment() {
 
-    private lateinit var poseLandmarkerHelper: PoseLandmarkerHelper
-    private lateinit var backgroundExecutor: ExecutorService
+    private val cameraActivity: CameraActivity by lazy { activity as CameraActivity }
     private lateinit var preview: Preview
     private lateinit var imageAnalyzer: ImageAnalysis
     private var camera: Camera? = null
@@ -54,13 +53,7 @@ class CameraFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-        backgroundExecutor = Executors.newSingleThreadExecutor()
-
-        backgroundExecutor.execute {
-            poseLandmarkerHelper = (activity as CameraActivity).poseLandmarkerHelper
-            setUpCamera()
-        }
+        setUpCamera()
     }
 
     private fun setUpCamera() {
@@ -96,7 +89,7 @@ class CameraFragment : Fragment() {
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                 .build()
                 .also {
-                    it.setAnalyzer(backgroundExecutor) { image ->
+                    it.setAnalyzer(cameraActivity.backgroundExecutor) { image ->
                         detectPose(image)
                     }
                 }
@@ -119,7 +112,7 @@ class CameraFragment : Fragment() {
     }
 
     private fun detectPose(imageProxy: ImageProxy) {
-        poseLandmarkerHelper.detectLiveStream(
+        cameraActivity.poseLandmarkerHelper.detectLiveStream(
             imageProxy = imageProxy,
             isFrontCamera = cameraFacing == CameraSelector.LENS_FACING_FRONT
         )

@@ -67,6 +67,10 @@ class OverlayView(context: Context?, attrs: AttributeSet?) :
     override fun draw(canvas: Canvas) {
         super.draw(canvas)
         results?.let { poseLandmarkerResult ->
+            if (poseLandmarkerResult.landmarks().isEmpty()) {
+                return
+            }
+
             for (landmark in poseLandmarkerResult.landmarks()) {
                 for (normalizedLandmark in landmark) {
                     canvas.drawPoint(
