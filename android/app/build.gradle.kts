@@ -41,7 +41,7 @@ android {
 dependencies {
     // MediaPipe
     implementation("com.google.mediapipe:tasks-vision:latest.release")
-    // KTX for Activity
+    implementation("com.google.mediapipe:tasks-core:0.10.11")
     implementation("androidx.activity:activity-ktx:1.10.1")
 }
 

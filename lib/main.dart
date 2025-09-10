@@ -1,8 +1,11 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image/image.dart' as img;
+import 'package:camera/camera.dart';
 
 void main() {
   runApp(const MyApp());
@@ -19,226 +22,250 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
       ),
-      home: const PoseDetectorPage(),
+      home: RealtimePosePage(),
     );
   }
 }
 
-class PoseDetectorPage extends StatefulWidget {
-  const PoseDetectorPage({super.key});
+
+class RealtimePosePage extends StatefulWidget {
+  const RealtimePosePage({super.key});
 
   @override
-  State<PoseDetectorPage> createState() => _PoseDetectorPageState();
+  State<RealtimePosePage> createState() => _RealtimePosePageState();
 }
 
-class _PoseDetectorPageState extends State<PoseDetectorPage> {
-  static const platform = MethodChannel('com.example.mediapipe_native_test/mediapipe');
+class _RealtimePosePageState extends State<RealtimePosePage> {
+  static const _methodChannel = MethodChannel('com.example.mediapipe_native_test/method');
+  static const _eventChannel = EventChannel('com.example.mediapipe_native_test/event');
 
-  final ImagePicker _picker = ImagePicker();
-  File? _imageFile;
-  ui.Image? _image;
+  CameraController? _cameraController;
+  bool _isProcessing = false;
+  StreamSubscription<dynamic>? _poseSubscription;
+
   List<List<Map<String, double>>> _landmarks = [];
-  String _timingDetails = '';
-  String _landmarkData = '';
-  bool _isLoading = false;
+  int _inferenceTime = 0;
+  Size _imageSize = Size.zero;
 
-  Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+  }
 
-    final imageBytes = await image.readAsBytes();
-    final decodedImage = await decodeImageFromList(imageBytes);
+  @override
+  void dispose() {
+    _poseSubscription?.cancel();
+    _cameraController?.stopImageStream();
+    _cameraController?.dispose();
+    super.dispose();
+  }
 
-    setState(() {
-      _imageFile = File(image.path);
-      _image = decodedImage;
-      _isLoading = true;
-      _timingDetails = '';
-      _landmarkData = '';
-      _landmarks = [];
-    });
-
+  Future<void> _initializeCamera() async {
     try {
-      final result = await platform.invokeMethod('detectPose', {'imageBytes': imageBytes});
-      _handleDetectionResult(result);
-    } on PlatformException catch (e) {
-      setState(() {
-        _timingDetails = "Gagal memanggil native method: '${e.message}'.";
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      final cameras = await availableCameras();
+      final backCamera = cameras.firstWhere(
+            (camera) => camera.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
+      );
+
+      _cameraController = CameraController(
+        backCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.yuv420,
+      );
+
+      await _cameraController!.initialize();
+      if (!mounted) return;
+
+      setState(() {});
+      _listenToPoseResults();
+      await _cameraController!.startImageStream(_processCameraImage);
+      print("Kamera berhasil diinisialisasi dan stream dimulai.");
+    } catch (e) {
+      print("Gagal inisialisasi kamera: $e");
     }
   }
 
-  void _handleDetectionResult(dynamic result) {
-    if (result == null) {
-      setState(() {
-        _timingDetails = "Gagal mendapatkan hasil dari native code (hasil null).";
-        _landmarkData = '';
-        _landmarks = [];
-      });
-      return;
-    }
+  void _listenToPoseResults() {
+    _poseSubscription = _eventChannel.receiveBroadcastStream().listen((data) {
+      if (!mounted) return;
 
-    final Map<Object?, Object?> resultMap = result;
+      final resultMap = Map<String, dynamic>.from(data);
+      final landmarksResult = resultMap['landmarks'] as List<dynamic>?;
 
-    // Check for an error from the native side first
-    if (resultMap.containsKey('error')) {
-      setState(() {
-        _timingDetails = "Error dari native code: ${resultMap['error']}";
-        _landmarkData = '';
-        _landmarks = [];
-      });
-      return;
-    }
-
-    // If no error, proceed with parsing
-    final timing = resultMap['timing'] as Map<Object?, Object?>;
-    final total = timing['total'];
-    final preprocessing = timing['preprocessing'];
-    final inference = timing['inference'];
-    final timingStr = "Total: ${total}ms\nPreprocessing: ${preprocessing}ms\nInference: ${inference}ms";
-
-    // Parse landmarks
-    final landmarksResult = resultMap['landmarks'] as List<Object?>?;
-    final List<List<Map<String, double>>> parsedLandmarks = [];
-    final StringBuffer landmarkBuffer = StringBuffer();
-
-    if (landmarksResult != null && landmarksResult.isNotEmpty) {
-      int poseIndex = 0;
-      for (final poseData in landmarksResult) {
-        final List<Map<String, double>> pose = [];
-        landmarkBuffer.writeln('Pose #${poseIndex++}');
-        int landmarkIndex = 0;
-        for (final landmarkMap in (poseData as List<Object?>)) {
-          final landmark = (landmarkMap as Map<Object?, Object?>).cast<String, double>();
-          pose.add(landmark);
-          final x = landmark['x']!.toStringAsFixed(2);
-          final y = landmark['y']!.toStringAsFixed(2);
-          final z = landmark['z']!.toStringAsFixed(2);
-          final vis = landmark['visibility']!.toStringAsFixed(2);
-          landmarkBuffer.writeln('  L${landmarkIndex++}: (x:$x, y:$y, z:$z, vis:$vis)');
+      final List<List<Map<String, double>>> parsedLandmarks = [];
+      if (landmarksResult != null && landmarksResult.isNotEmpty) {
+        for (final poseData in landmarksResult) {
+          final List<Map<String, double>> pose = [];
+          for (final landmarkMap in (poseData as List<dynamic>)) {
+            final landmark = Map<String, double>.from((landmarkMap as Map<dynamic, dynamic>).cast<String, double>());
+            pose.add(landmark);
+          }
+          parsedLandmarks.add(pose);
         }
-        parsedLandmarks.add(pose);
       }
-    } else {
-      landmarkBuffer.writeln("Tidak ada pose yang terdeteksi.");
-    }
 
-    setState(() {
-      _timingDetails = timingStr;
-      _landmarkData = landmarkBuffer.toString();
-      _landmarks = parsedLandmarks;
+      setState(() {
+        _landmarks = parsedLandmarks;
+        _inferenceTime = resultMap['inferenceTime'] as int;
+        _imageSize = Size(
+          (resultMap['imageWidth'] as int).toDouble(),
+          (resultMap['imageHeight'] as int).toDouble(),
+        );
+      });
+
+      _isProcessing = false;
+    }, onError: (error) {
+      print("Error pada EventChannel: ${error.message}");
+      _isProcessing = false;
     });
   }
+
+  void _processCameraImage(CameraImage image) {
+    if (_isProcessing) return;
+    _isProcessing = true;
+
+    // *** INI BAGIAN YANG DIPERBAIKI ***
+    // Konversi YUV420 dari CameraImage ke byte array JPEG
+    _convertYUV420toJPEG(image).then((jpegBytes) {
+      if (jpegBytes.isNotEmpty) {
+        try {
+          _methodChannel.invokeMethod('detectFromStream', {'imageBytes': jpegBytes});
+        } catch (e) {
+          print("Gagal memanggil native method: $e");
+          _isProcessing = false;
+        }
+      } else {
+        _isProcessing = false;
+      }
+    });
+  }
+
+  // Fungsi helper untuk mengonversi YUV420 ke JPEG
+  Future<Uint8List> _convertYUV420toJPEG(CameraImage image) async {
+    final yuvImage = img.Image(
+        width: image.width,
+        height: image.height,
+        numChannels: 4 // Anggap sebagai RGBA untuk sementara
+    );
+
+    final yPlane = image.planes[0].bytes;
+    final uPlane = image.planes[1].bytes;
+    final vPlane = image.planes[2].bytes;
+
+    final uRowStride = image.planes[1].bytesPerRow;
+    final vRowStride = image.planes[2].bytesPerRow;
+    final yRowStride = image.planes[0].bytesPerRow;
+
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        final yIndex = y * yRowStride + x;
+        final uvIndex = (y ~/ 2) * uRowStride + (x ~/ 2);
+
+        final yValue = yPlane[yIndex];
+        final uValue = uPlane[uvIndex];
+        final vValue = vPlane[uvIndex];
+
+        // Konversi YUV ke RGB (rumus standar)
+        final r = (yValue + 1.402 * (vValue - 128)).clamp(0, 255).toInt();
+        final g = (yValue - 0.344136 * (uValue - 128) - 0.714136 * (vValue - 128)).clamp(0, 255).toInt();
+        final b = (yValue + 1.772 * (uValue - 128)).clamp(0, 255).toInt();
+
+        yuvImage.setPixelRgba(x, y, r, g, b, 255);
+      }
+    }
+
+    // Encode gambar yang sudah dikonversi ke format JPEG
+    return Uint8List.fromList(img.encodeJpg(yuvImage, quality: 75));
+  }
+
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('MediaPipe Pose Detection'),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              if (_image == null)
-                Container(
-                  height: 300,
-                  color: Colors.grey[300],
-                  child: const Center(child: Text('Pilih gambar untuk memulai')),
-                )
-              else
-                SizedBox(
-                  height: 300,
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: SizedBox(
-                      width: _image!.width.toDouble(),
-                      height: _image!.height.toDouble(),
-                      child: CustomPaint(
-                        painter: PosePainter(_image, _landmarks),
-                      ),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 20),
-              ElevatedButton.icon(
-                onPressed: _isLoading ? null : _pickImage,
-                icon: const Icon(Icons.image),
-                label: const Text('Pilih dari Galeri'),
-              ),
-              const SizedBox(height: 20),
-              if (_isLoading) const Center(child: CircularProgressIndicator()),
-              _buildResultCard("Waktu Pemrosesan", _timingDetails),
-              _buildResultCard("Data Landmark", _landmarkData),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-  Widget _buildResultCard(String title, String content) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            SelectableText(
-              content.isEmpty ? '...' : content,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Real-time Pose Detection')),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          CameraPreview(_cameraController!),
+          if (_landmarks.isNotEmpty)
+            CustomPaint(
+              painter: PosePainter(
+                landmarks: _landmarks,
+                imageSize: _imageSize,
+              ),
             ),
-          ],
-        ),
+          Positioned(
+            bottom: 24,
+            left: 16,
+            right: 16,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'Inference Time: ${_inferenceTime}ms',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class PosePainter extends CustomPainter {
-  final ui.Image? image;
-  final List<List<Map<String, double>>> landmarks;
 
-  PosePainter(this.image, this.landmarks);
+class PosePainter extends CustomPainter {
+  final List<List<Map<String, double>>> landmarks;
+  final Size imageSize;
+
+  PosePainter({required this.landmarks, required this.imageSize});
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (image != null) {
-      canvas.drawImage(image!, Offset.zero, Paint());
-    }
+    if (landmarks.isEmpty || imageSize == Size.zero) return;
+
+    final double scaleX = size.width / imageSize.height;
+    final double scaleY = size.height / imageSize.width;
+    final double scale = scaleX < scaleY ? scaleX : scaleY;
+
+    final double offsetX = (size.width - imageSize.height * scale) / 2;
+    final double offsetY = (size.height - imageSize.width * scale) / 2;
 
     final pointPaint = Paint()
-      ..color = Colors.green
+      ..color = Colors.lightGreenAccent
       ..strokeWidth = 8
       ..strokeCap = StrokeCap.round;
 
     final linePaint = Paint()
-      ..color = Colors.red
+      ..color = Colors.redAccent
       ..strokeWidth = 3;
 
     for (final pose in landmarks) {
-      for (final landmark in pose) {
-        canvas.drawPoints(
-            ui.PointMode.points,
-            [
-              Offset(
-                landmark['x']! * size.width,
-                landmark['y']! * size.height,
-              ),
-            ],
-            pointPaint);
-      }
+      final List<Offset> points = pose.map((landmark) {
+        return Offset(
+          (1 - landmark['y']!) * imageSize.height * scale + offsetX,
+          landmark['x']! * imageSize.width * scale + offsetY,
+        );
+      }).toList();
 
-      // These are the connections defined by MediaPipe for the BlazePose model.
+      canvas.drawPoints(ui.PointMode.points, points, pointPaint);
+
       final connections = [
         [0, 1], [1, 2], [2, 3], [3, 7], [0, 4], [4, 5], [5, 6], [6, 8],
         [9, 10], [11, 12], [11, 13], [13, 15], [15, 17], [15, 19], [15, 21],
@@ -248,21 +275,15 @@ class PosePainter extends CustomPainter {
       ];
 
       for (final connection in connections) {
-          if (pose.length > connection[0] && pose.length > connection[1]) {
-              final start = pose[connection[0]];
-              final end = pose[connection[1]];
-              canvas.drawLine(
-                  Offset(start['x']! * size.width, start['y']! * size.height),
-                  Offset(end['x']! * size.width, end['y']! * size.height),
-                  linePaint,
-              );
-          }
+        if (points.length > connection[0] && points.length > connection[1]) {
+          canvas.drawLine(points[connection[0]], points[connection[1]], linePaint);
+        }
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true;
+  bool shouldRepaint(covariant PosePainter oldDelegate) {
+    return oldDelegate.landmarks != landmarks || oldDelegate.imageSize != imageSize;
   }
 }
